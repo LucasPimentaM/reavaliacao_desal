@@ -1,6 +1,6 @@
-#ifndef DESSALINATION
+#ifndef DESSAL
 
-#define DESSALINATION
+#define DESSAL
 
 #include "../entrydata/entrydata.h"
 

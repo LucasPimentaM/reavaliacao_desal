@@ -17,6 +17,7 @@ PetscErrorCode DessalBalance(DessalData *dessal_data)
               entry_salinity_feed = dessal_data->entry_salinity_feed,
               entry_salinity_cool = dessal_data->entry_salinity_cool,
               vacuum_pressure = dessal_data->vacuum_pressure,
+              BaCl2_concentration = dessal_data->BaCl2_concentration,
               membrane_area = dessal_data->membrane_area,
               membrane_thickness = dessal_data->membrane_thickness,
               membrane_porosity = dessal_data->membrane_porosity,
@@ -41,38 +42,47 @@ PetscErrorCode DessalBalance(DessalData *dessal_data)
               film_boundary_temperature = dessal_data->film_boundary_temperature,
               film_wall_temperature = dessal_data->film_wall_temperature,
               cool_wall_temperature = dessal_data->cool_wall_temperature,
+              membrane_salinity = dessal_data->membrane_salinity,
               out_salinity_feed = dessal_data->out_salinity_feed,
+              membrane_gap_pressure = dessal_data->membrane_gap_pressure,
               mass_flux = dessal_data->mass_flux,
+              film_thickness = dessal_data->film_thickness,
               heat_flux = dessal_data->heat_flux,
               vapor_heat_flux = dessal_data->vapor_heat_flux,
-              feed_outflow_rate = dessal_data->feed_outflow_rate,
-              concentration = dessal_data->concentration;
+              feed_outflow_rate = dessal_data->feed_outflow_rate;
 
     // Feed
     SaltWaterProperties feed_prop, feed_memb_prop;
-    PetscReal feed_resistance, feed_heat_transf_coef, mass_transfer_coef;
+    PetscReal feed_resistance, feed_heat_transf_coef, feed_mass_trasf_coef;
     PetscReal avg_feed_temperature = 0.5 * (entry_temperature_feed + out_temperature_feed),
               avg_feed_salinity = PetscMax(0.5 * (entry_salinity_feed + out_salinity_feed), 0.0);
 
-    SaltWaterPropBuild(&feed_prop, avg_feed_temperature, avg_feed_salinity);
-    SaltWaterPropBuild(&feed_memb_prop, feed_membrane_temperature, concentration);
-
-    mass_transfer_coef = ChannelMassTransfCoef(&feed_prop,
-                                               &feed_memb_prop,
-                                               feed_mass_flow_rate,
-                                               feed_channel_height,
-                                               channel_width,
-                                               number_channels,
-                                               spacer_porosity);
+    SaltWaterPropBuild(&feed_prop, avg_feed_temperature, avg_feed_salinity, BaCl2_concentration);
+    SaltWaterPropBuild(&feed_memb_prop, feed_membrane_temperature, membrane_salinity, BaCl2_concentration);
 
     feed_heat_transf_coef = ChannelHeatTransfCoef(&feed_prop,
-                                                  &feed_memb_prop,
                                                   feed_mass_flow_rate,
                                                   feed_channel_height,
                                                   channel_width,
+                                                  membrane_area,
                                                   number_channels,
                                                   spacer_porosity);
     feed_resistance = 1.0 / feed_heat_transf_coef;
+
+    feed_mass_trasf_coef = ChannelMassTransfCoef(&feed_prop,
+                                                 &feed_memb_prop,
+                                                 feed_mass_flow_rate,
+                                                 feed_channel_height,
+                                                 channel_width,
+                                                 membrane_area,
+                                                 number_channels,
+                                                 spacer_porosity);
+
+    // Updating the salinity at the feed-membrane interface
+    membrane_salinity = MembraneSalinity(&feed_prop,
+                                         avg_feed_salinity,
+                                         feed_mass_trasf_coef,
+                                         mass_flux);
 
     // Heat conduction in the membrane
     MoistAirProperties pore_air_prop;
@@ -83,52 +93,59 @@ PetscErrorCode DessalBalance(DessalData *dessal_data)
     membrane_conductivity = MembraneConductivity(&pore_air_prop, polymer_conductivity, membrane_porosity);
     membrane_resistance = membrane_thickness / membrane_conductivity;
 
-    // Heat conduction in the distillate film
+    // Mass flux in the air gap
     SaltWaterProperties film_prop;
+    WaterProduction water_production;
+    PetscReal latent_resistance;
+
+    SaltWaterPropBuild(&film_prop, film_boundary_temperature, 0.0, 0.0);
+
+    water_production = MassFlux(membrane_porosity,
+                                membrane_tortuosity,
+                                membrane_thickness,
+                                pore_diameter,
+                                gap_spacer_porosity,
+                                air_gap_thickness,
+                                0.5 * (feed_membrane_temperature + gap_membrane_temperature),
+                                0.5 * (gap_membrane_temperature + film_boundary_temperature),
+                                feed_memb_prop.vapor_pressure,
+                                film_prop.vapor_pressure,
+                                membrane_gap_pressure,
+                                vacuum_pressure,
+                                mass_flux,
+                                film_thickness);
+
+    mass_flux = water_production.mass_flux;
+    membrane_gap_pressure = water_production.membrane_gap_pressure;
+
+    mass_flux = PetscMax(mass_flux, 0.0);
+    mass_flux = PetscMin(mass_flux, 0.2 * feed_mass_flow_rate / membrane_area);
+
+    vapor_heat_flux = mass_flux * feed_memb_prop.latent_heat_vaporization;
+
+    latent_resistance = (feed_membrane_temperature - film_boundary_temperature) / vapor_heat_flux;
+
+    // Heat conduction in the distillate film
+    MoistAirProperties gap_air_prop;
     PetscReal film_resistance;
     PetscReal effective_conductivity;
-    PetscReal film_thickness = 0.6e-3; 
 
-    SaltWaterPropBuild(&film_prop, film_boundary_temperature, 0.0);
+    MoistAirPropBuild(&gap_air_prop, 0.5 * (gap_membrane_temperature + film_boundary_temperature));
+
+    film_thickness = film_prop.density * (film_prop.density - gap_air_prop.density) * acceleration_gravity;
+    film_thickness = 3.0 * mass_flux * film_prop.dyn_viscosity * channel_width / film_thickness;
+    film_thickness = 0.8 * PetscPowReal(film_thickness, 1.0 / 3.0);
 
     effective_conductivity = gap_spacer_porosity * film_prop.thermal_conductivity + (1.0 - gap_spacer_porosity) * spacer_conductivity;
 
     film_resistance = film_thickness / effective_conductivity;
 
     // Heat conduction in the air gap
-    MoistAirProperties gap_air_prop;
     PetscReal gap_resistance;
-
-    MoistAirPropBuild(&gap_air_prop, 0.5 * (gap_membrane_temperature + film_boundary_temperature));
 
     effective_conductivity = gap_spacer_porosity * gap_air_prop.thermal_conductivity + (1.0 - gap_spacer_porosity) * spacer_conductivity;
 
     gap_resistance = PetscMax(0.0, air_gap_thickness - film_thickness) / effective_conductivity;
-
-    // Mass flux in the air gap
-    PetscReal latent_resistance;
-
-    mass_flux = MassFlux(membrane_porosity,
-                         membrane_tortuosity,
-                         membrane_thickness,
-                         pore_diameter,
-                         gap_spacer_porosity,
-                         air_gap_thickness,
-                         0.5 * (feed_membrane_temperature + gap_membrane_temperature),
-                         0.5 * (gap_membrane_temperature + film_boundary_temperature),
-                         feed_memb_prop.vapor_pressure,
-                         film_prop.vapor_pressure,
-                         vacuum_pressure);
-
-    mass_flux = PetscMax(0.0, mass_flux);
-    mass_flux = PetscMin(feed_mass_flow_rate / membrane_area * 0.1, mass_flux);
-   
-    //concetration at the membrane
-    concentration = SaltWaterConcentration(mass_transfer_coef, avg_feed_temperature, avg_feed_salinity, mass_flux);
-   
-    vapor_heat_flux = mass_flux * feed_memb_prop.latent_heat_vaporization;
-
-    latent_resistance = (feed_membrane_temperature - film_boundary_temperature) / vapor_heat_flux;
 
     // Heat conduction in the wall
     PetscReal wall_resistance;
@@ -140,14 +157,14 @@ PetscErrorCode DessalBalance(DessalData *dessal_data)
     PetscReal cool_resistance, cool_heat_transf_coef;
     PetscReal avg_cool_temperature = 0.5 * (entry_temperature_cool + out_temperature_cool);
 
-    SaltWaterPropBuild(&cool_prop, avg_cool_temperature, entry_salinity_cool);
-    SaltWaterPropBuild(&cool_wall_prop, cool_wall_temperature, entry_salinity_cool);
+    SaltWaterPropBuild(&cool_prop, avg_cool_temperature, entry_salinity_cool, BaCl2_concentration);
+    SaltWaterPropBuild(&cool_wall_prop, cool_wall_temperature, entry_salinity_cool, BaCl2_concentration);
 
     cool_heat_transf_coef = ChannelHeatTransfCoef(&cool_prop,
-                                                  &cool_wall_prop,
                                                   cool_mass_flow_rate,
                                                   cool_channel_height,
                                                   channel_width,
+                                                  membrane_area,
                                                   number_channels,
                                                   spacer_porosity);
     cool_resistance = 1.0 / cool_heat_transf_coef;
@@ -195,12 +212,14 @@ PetscErrorCode DessalBalance(DessalData *dessal_data)
     dessal_data->film_boundary_temperature = film_boundary_temperature;
     dessal_data->film_wall_temperature = film_wall_temperature;
     dessal_data->cool_wall_temperature = cool_wall_temperature;
+    dessal_data->membrane_salinity = membrane_salinity;
     dessal_data->out_salinity_feed = out_salinity_feed;
+    dessal_data->membrane_gap_pressure = membrane_gap_pressure;
     dessal_data->mass_flux = mass_flux;
+    dessal_data->film_thickness = film_thickness;
     dessal_data->heat_flux = heat_flux;
     dessal_data->vapor_heat_flux = vapor_heat_flux;
     dessal_data->feed_outflow_rate = feed_outflow_rate;
-    dessal_data->concentration = concentration;
 
     return 0;
 }

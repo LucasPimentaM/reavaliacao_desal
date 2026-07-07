@@ -1,6 +1,5 @@
 #include "../properties/properties.h"
 #include "../entrydata/entrydata.h"
-#include "physics.h"
 
 /*
 Maxwell's model for the thermal conductivity of the membrane and empirical correlation for the Nusselt number in spacer-filled channels
@@ -20,98 +19,55 @@ PetscReal MembraneConductivity(MoistAirProperties *pore_air_prop,
     return 0.93 * air_conductivity * (1.0 + 2.0 * beta * (1.0 - membrane_porosity)) / (1.0 - beta * (1.0 - membrane_porosity));
 }
 
-PetscReal ChannelMassTransfCoef(SaltWaterProperties *bulk_water_prop,
+PetscReal ChannelHeatTransfCoef(SaltWaterProperties *bulk_water_prop,
                                 SaltWaterProperties *wall_water_prop,
                                 PetscReal mass_flow_rate,
                                 PetscReal channel_height,
                                 PetscReal channel_width,
-                                PetscReal membrane_area,
-                                PetscReal number_channels,
-                                PetscReal spacer_porosity)
-{
-    // Properties
-    PetscReal dyn_viscosity = bulk_water_prop->dyn_viscosity,
-              density = bulk_water_prop->density,
-              schmidt = dyn_viscosity / (density * salt_diffusivity);
-
-    PetscReal channel_length, hydraulic_diameter, mass_velocity, reynolds, inverse_graetz, sherwood;
-
-    channel_length = membrane_area / (number_channels * channel_width);
-
-    hydraulic_diameter = 2.0 * channel_height;
-
-    mass_velocity = mass_flow_rate / (number_channels * channel_height * channel_width);
-
-    reynolds = mass_velocity * channel_height / dyn_viscosity;
-
-    inverse_graetz = channel_length / (reynolds * schmidt * hydraulic_diameter);
-
-    if (inverse_graetz <= 0.001)
-    {
-        sherwood = 2.236 * PetscPowReal(inverse_graetz, -1.0 / 3.0);
-    }
-    else if (inverse_graetz > 0.001 && inverse_graetz <= 0.01)
-    {
-        sherwood = 2.236 * PetscPowReal(inverse_graetz, -1.0 / 3.0) + 0.9;
-    }
-    else
-    {
-        sherwood = 8.235 + 0.0364 / inverse_graetz;
-    }
-
-    return salt_diffusivity * sherwood / channel_height;
-}
-
-PetscReal ChannelHeatTransfCoef(SaltWaterProperties *bulk_water_prop,
-                                PetscReal mass_flow_rate,
-                                PetscReal channel_height,
-                                PetscReal channel_width,
-                                PetscReal membrane_area,
                                 PetscInt number_channels,
                                 PetscReal spacer_porosity)
 {
     // Properties
     PetscReal dyn_viscosity = bulk_water_prop->dyn_viscosity,
               thermal_conductivity = bulk_water_prop->thermal_conductivity,
-              prandtl = bulk_water_prop->prandtl;
+              prandtl = bulk_water_prop->prandtl,
+              wall_prandtl = wall_water_prop->prandtl;
 
-    PetscReal channel_length, hydraulic_diameter, mass_velocity, reynolds, inverse_graetz, nusselt;
+    PetscReal mass_velocity, reynolds, nusselt;
 
-    channel_length = membrane_area / (number_channels * channel_width);
+    mass_velocity = mass_flow_rate / (number_channels * channel_height * channel_width * spacer_porosity);
 
-    hydraulic_diameter = 2.0 * channel_height;
+    reynolds = mass_velocity * channel_height / dyn_viscosity;
 
-    mass_velocity = mass_flow_rate / (number_channels * channel_height * channel_width);
-
-    reynolds = mass_velocity * hydraulic_diameter / dyn_viscosity;
-
-    inverse_graetz = channel_length / (reynolds * prandtl * hydraulic_diameter);
-
-    if (inverse_graetz <= 0.001)
-    {
-        nusselt = 2.236 * PetscPowReal(inverse_graetz, -1.0 / 3.0);
-    }
-    else if (inverse_graetz > 0.001 && inverse_graetz <= 0.01)
-    {
-        nusselt = 2.236 * PetscPowReal(inverse_graetz, -1.0 / 3.0) + 0.9;
-    }
-    else
-    {
-        nusselt = 8.235 + 0.0364 / inverse_graetz;
-    }
+    nusselt = 0.22 * PetscPowReal(reynolds, 0.69) * PetscPowReal(prandtl, 0.13);
+    nusselt *= PetscPowReal(prandtl / wall_prandtl, 0.25);
 
     return thermal_conductivity * nusselt / channel_height;
 }
 
-PetscReal MembraneSalinity(SaltWaterProperties *bulk_water_prop,
-                           PetscReal bulk_salinity,
-                           PetscReal mass_transfer_coef,
-                           PetscReal mass_flux)
+PetscReal ChannelMassTransfCoef(SaltWaterProperties *bulk_water_prop,
+                                SaltWaterProperties *wall_water_prop,
+                                PetscReal channel_height,
+                                PetscReal channel_width,
+                                PetscInt number_channels,
+                                PetscReal spacer_porosity)
 {
     // Properties
-    PetscReal density = bulk_water_prop->density;
+    PetscReal dyn_viscosity = bulk_water_prop->dyn_viscosity,
+              mass_diffusivity = bulk_water_prop->mass_diffusivity,
+              schmidt = bulk_water_prop->schmidt,
+              wall_schmidt = wall_water_prop->schmidt;
 
-    return bulk_salinity * PetscExpReal(mass_flux / (density * mass_transfer_coef));
+    PetscReal mass_velocity, reynolds, sherwood;
+
+    mass_velocity = mass_flow_rate / (number_channels * channel_height * channel_width * spacer_porosity);
+
+    reynolds = mass_velocity * channel_height / dyn_viscosity;
+
+    sherwood = 0.22 * PetscPowReal(reynolds, 0.69) * PetscPowReal(schmidt, 0.13);
+    sherwood *= PetscPowReal(schmidt / wall_schmidt, 0.25);
+
+    return mass_diffusivity * sherwood / channel_height;
 }
 
 /*
@@ -146,43 +102,63 @@ PetscReal KnudsenDiffusion(PetscReal membrane_porosity,
     return knudsen_diffusivity;
 }
 
-WaterProduction MassFlux(PetscReal membrane_porosity,
-                         PetscReal membrane_tortuosity,
-                         PetscReal membrane_thickness,
-                         PetscReal pore_diameter,
-                         PetscReal gap_spacer_porosity,
-                         PetscReal air_gap_thickness,
-                         PetscReal temperature_membrane,
-                         PetscReal temperature_gap,
-                         PetscReal feed_membrane_pressure,
-                         PetscReal film_boundary_pressure,
-                         PetscReal membrane_gap_pressure,
-                         PetscReal vacuum_pressure,
-                         PetscReal mass_flux,
-                         PetscReal film_thickness)
+PetscReal SaltWaterConcentration(PetscReal mass_transfer_coef,
+                                 PetscReal temperature,
+                                 PetscReal salinity,
+                                 PetscReal mass_flux)
 {
-    WaterProduction water_production;
+    PetscReal molarity, density_NaCl, molar_mass_NaCl, concentration, converted_concentration;
+    SaltWaterProperties prop;
+    
+    SaltWaterPropBuild(&prop, temperature, 0.0);
+
+    density_NaCl = 2160.0;
+    molar_mass_NaCl = 58.44e-3;
+    //molarity = (1.0 / molar_mass_NaCl) * salinity / ((1.0 - salinity) / prop.density + salinity / density_NaCl); // tenho que mudar essa expressão
+    /* bulk salt molarity C_b = w_b * rho / M_s  (mol/m^3) */
+    molarity = salinity * prop.density / molar_mass_NaCl;
+    molarity /= 1000.0; 
+
+    concentration = molarity * PetscExpReal(mass_flux/(prop.density * mass_transfer_coef));
+
+    converted_concentration = 1000.0 * molar_mass_NaCl * density_NaCl * concentration / (prop.density * density_NaCl + molar_mass_NaCl * concentration * (density_NaCl - prop.density));
+
+    return converted_concentration;
+}
+
+PetscReal MassFlux(PetscReal membrane_porosity,
+                   PetscReal membrane_tortuosity,
+                   PetscReal membrane_thickness,
+                   PetscReal pore_diameter,
+                   PetscReal gap_spacer_porosity,
+                   PetscReal air_gap_thickness,
+                   PetscReal temperature_membrane,
+                   PetscReal temperature_gap,
+                   PetscReal feed_membrane_pressure,
+                   PetscReal film_boundary_pressure,
+                   PetscReal vacuum_pressure)
+{
     PetscReal molecular_diffusivity, knudsen_diffusivity, effective_diffusivity,
-              total_pressure = atm_pressure + vacuum_pressure;
+              membrane_permeability, gap_permeability, permeability,
+              mass_flux;
     
     temperature_membrane += 273.15;
     temperature_gap += 273.15;
-
-    molecular_diffusivity = MolecularDiffusion(1.0, 1.0, temperature_gap);
-
-    membrane_gap_pressure = -mass_flux * gas_constant * temperature_gap * (air_gap_thickness - film_thickness) / (water_molar_mass * molecular_diffusivity);
-    membrane_gap_pressure = total_pressure - (total_pressure - film_boundary_pressure) * PetscExpReal(membrane_gap_pressure);
 
     molecular_diffusivity = MolecularDiffusion(membrane_porosity, membrane_tortuosity, temperature_membrane);
     knudsen_diffusivity = KnudsenDiffusion(membrane_porosity, membrane_tortuosity, pore_diameter, temperature_membrane);
 
     effective_diffusivity = molecular_diffusivity * knudsen_diffusivity / (molecular_diffusivity + (atm_pressure + vacuum_pressure) * knudsen_diffusivity);
 
-    mass_flux = (molecular_diffusivity - effective_diffusivity * membrane_gap_pressure) / (molecular_diffusivity - effective_diffusivity * feed_membrane_pressure);
-    mass_flux = water_molar_mass * molecular_diffusivity * PetscLogReal(mass_flux) / (gas_constant * temperature_membrane * membrane_thickness);
+    membrane_permeability = water_molar_mass * effective_diffusivity / (gas_constant * temperature_membrane * membrane_thickness);
 
-    water_production.mass_flux = mass_flux;
-    water_production.membrane_gap_pressure = membrane_gap_pressure;
+    molecular_diffusivity = MolecularDiffusion(1.0, 1.0, temperature_gap);
 
-    return water_production;
+    gap_permeability = water_molar_mass * molecular_diffusivity / (gas_constant * temperature_gap * (atm_pressure + vacuum_pressure) * air_gap_thickness);
+
+    permeability = membrane_permeability * gap_permeability / (membrane_permeability + gap_permeability);
+
+    mass_flux = permeability * (feed_membrane_pressure - film_boundary_pressure);
+
+    return mass_flux;
 }
