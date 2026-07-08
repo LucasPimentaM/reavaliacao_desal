@@ -7,9 +7,10 @@
 // Defining the solver context data structure
 typedef struct
 {
-    SNES snes;
+    TS ts;
     DM da;
     EntryData entry_data;
+    PetscViewer viewer;
 } SolverCtx;
 
 // Defining a solver context constructor
