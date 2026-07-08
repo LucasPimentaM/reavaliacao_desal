@@ -3,6 +3,7 @@
 #define PROPERTIES
 
 #include <petscsys.h>
+#include "../entrydata/entrydata.h"
 
 // Data structure containing the thermophysical properties of moist air
 typedef struct
@@ -13,14 +14,18 @@ typedef struct
 // Data structure containing the thermophysical properties of salt water
 typedef struct
 {
-    PetscReal density, specific_heat, dyn_viscosity, thermal_conductivity, prandtl,
-              vapor_pressure, latent_heat_vaporization;
+    PetscReal density, specific_heat, dyn_viscosity, thermal_conductivity, prandtl, schmidt,
+              vapor_pressure, latent_heat_vaporization, mass_diffusivity;
 } SaltWaterProperties;
 
 // Function that updates the thermophysical properties of salt water
-PetscErrorCode SaltWaterPropBuild(SaltWaterProperties *salt_water_prop, PetscReal temperature, PetscReal salinity, PetscReal BaCl2_concentration);
+PetscErrorCode SaltWaterPropBuild(SaltWaterProperties *salt_water_prop, PetscReal temperature, PetscReal salinity);
 
 // Function that updates the thermophysical properties of moist air
 PetscErrorCode MoistAirPropBuild(MoistAirProperties *moist_air_prop, PetscReal temperature);
+
+//Function that calculates the specific heat of dry air
+
+PetscReal DryAirSpecificHeat(PetscReal temperature);
 
 #endif

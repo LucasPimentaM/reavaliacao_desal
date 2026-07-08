@@ -4,7 +4,7 @@
 
 #include "../properties/properties.h"
 
-// Function to calculate the mass transfer coefficient in the feed water channel
+// Function to calculate the heat transfer coefficients in the water channels
 PetscReal ChannelHeatTransfCoef(SaltWaterProperties *bulk_water_prop,
                                 SaltWaterProperties *wall_water_prop,
                                 PetscReal mass_flow_rate,

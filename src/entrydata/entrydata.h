@@ -2,7 +2,7 @@
 
 #define ENTRYDATA
 
-#include <petscsnes.h>
+#include <petscts.h>
 #include <petscdm.h>
 #include <petscdmda.h>
 
@@ -12,18 +12,18 @@ Defining necessary constants
 
 static const PetscReal water_molar_mass = 18.015e-3;
 static const PetscReal salt_molar_mass = 58.443e-3;
-static const PetscReal salt_diffusivity = 1.473e-9; // https://doi.org/10.1021/ja01589a011
-static const PetscReal acceleration_gravity = 9.81;
+static const PetscReal air_molar_mass = 28.97e-3;
 static const PetscReal gas_constant = 8.3144698;
 static const PetscReal atm_pressure = 101.325e3;
 static const PetscReal membrane_tortuosity = 2.27; // https://doi.org/10.1016/j.memsci.2017.04.002
+static const PetscReal ambient_temperature = 27.5;
 
 // Data structure containing the data involved in the model for the desalination module
 typedef struct
 {
     // Operational conditions
     PetscReal feed_mass_flow_rate, cool_mass_flow_rate, entry_temperature_feed, entry_temperature_cool,
-              entry_salinity_feed, entry_salinity_cool, vacuum_pressure, BaCl2_concentration;
+              entry_salinity_feed, entry_salinity_cool, vacuum_pressure;
 
     // Geometrical dimensions and fixed properties
     PetscReal membrane_area, membrane_thickness, membrane_porosity, pore_diameter, feed_channel_height,
@@ -33,8 +33,8 @@ typedef struct
 
     // Iterative data
     PetscReal out_temperature_feed, out_temperature_cool, feed_membrane_temperature, gap_membrane_temperature,
-              film_boundary_temperature, film_wall_temperature, cool_wall_temperature, membrane_salinity, out_salinity_feed,
-              membrane_gap_pressure, film_thickness, mass_flux, heat_flux, vapor_heat_flux, feed_outflow_rate;
+              film_boundary_temperature, film_wall_temperature, cool_wall_temperature, out_salinity_feed,
+              mass_flux, heat_flux, vapor_heat_flux, feed_outflow_rate, concentration;
 } DessalData;
 
 
@@ -42,6 +42,8 @@ typedef struct
 typedef struct
 {
     DessalData dessal_data;
+    PetscReal init_timestep, final_time;
+    PetscInt num_check_steps;
 } EntryData;
 
 // Entry data constructor

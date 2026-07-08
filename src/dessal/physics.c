@@ -47,6 +47,7 @@ PetscReal ChannelHeatTransfCoef(SaltWaterProperties *bulk_water_prop,
 
 PetscReal ChannelMassTransfCoef(SaltWaterProperties *bulk_water_prop,
                                 SaltWaterProperties *wall_water_prop,
+                                PetscReal mass_flow_rate,
                                 PetscReal channel_height,
                                 PetscReal channel_width,
                                 PetscInt number_channels,
