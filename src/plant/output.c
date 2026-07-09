@@ -31,6 +31,12 @@ PetscErrorCode ExportEntryData(EntryData *entry_data, char file[])
     PetscFPrintf(PETSC_COMM_WORLD, fptr, "Dessal: Thermal conductivity of the membrane material (W/mK), %.10f\n", entry_data->dessal_data.polymer_conductivity);
     PetscFPrintf(PETSC_COMM_WORLD, fptr, "Dessal: Thermal conductivity of the spacer material (W/mK), %.10f\n", entry_data->dessal_data.spacer_conductivity);
     PetscFPrintf(PETSC_COMM_WORLD, fptr, "Dessal: Thermal conductivity of the condensing wall (W/mK), %.10f\n", entry_data->dessal_data.wall_conductivity);
+	PetscFPrintf(PETSC_COMM_WORLD, fptr, "Dessal: Entry temperature feed (°C), %.10f\n", entry_data->dessal_data.entry_temperature_feed);
+	PetscFPrintf(PETSC_COMM_WORLD, fptr, "Dessal: Entry temperature cool (°C), %.10f\n", entry_data->dessal_data.entry_temperature_cool);
+	PetscFPrintf(PETSC_COMM_WORLD, fptr, "Dessal: Entry salinity feed (%%wt), %.10f\n", entry_data->dessal_data.entry_salinity_feed);
+	PetscFPrintf(PETSC_COMM_WORLD, fptr, "Dessal: Entry salinity cool (%%wt), %.10f\n", entry_data->dessal_data.entry_salinity_cool);
+	PetscFPrintf(PETSC_COMM_WORLD, fptr, "Dessal: Feed mass flow rate (kg/s), %.10f\n", entry_data->dessal_data.feed_mass_flow_rate);
+	PetscFPrintf(PETSC_COMM_WORLD, fptr, "Dessal: Cool mass flow rate (kg/s), %.10f\n", entry_data->dessal_data.cool_mass_flow_rate);
 
     PetscViewerDestroy(&viewer);
 
