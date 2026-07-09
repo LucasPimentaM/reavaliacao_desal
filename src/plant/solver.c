@@ -1,6 +1,6 @@
 #include "solver.h"
 
-#define NUM_VAR 13
+#define NUM_VAR 14
 
 PetscErrorCode SolverCtxBuild(SolverCtx *solver_ctx, EntryData *entry_data)
 {

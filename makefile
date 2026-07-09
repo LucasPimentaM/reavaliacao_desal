@@ -18,6 +18,7 @@ help:
 	@ ./bin/$(PROJNAME) -help | less
 
 # Run the binary
+# retirei o @ cat ./results/report.csv da ultima linha do run, pois era o responsável por imprimir no terminal o arquivo todo do resultado
 run:
 	@ time ./bin/$(PROJNAME) \
 	-membrane_area 12.96 \
@@ -29,7 +30,7 @@ run:
 	-entry_salinity_cool 0.035 \
 	-feed_mass_flow_rate 0.111111111 \
 	-cool_mass_flow_rate 0.111111111
-	@ cat ./results/report.csv
+	@echo "Simulação finalizada com sucesso!"
 
 # Build the binary
 build: binfolder $(BINPATH)

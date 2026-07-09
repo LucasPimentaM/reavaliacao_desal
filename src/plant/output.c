@@ -48,7 +48,7 @@ PetscErrorCode StepMonitor(TS ts, PetscInt step, PetscReal time, Vec solution, v
     PetscScalar *x_array;
     PetscReal membrane_area = entry_data.dessal_data.membrane_area;
     PetscInt number_steps = (PetscInt)entry_data.final_time / (entry_data.num_check_steps * entry_data.init_timestep);
-    SaltWaterProperties cool, feed, distilled;
+    SaltWaterProperties cool, feed, distilled, prop;
 
     DMGetLocalVector(da, &x_local);
     DMGlobalToLocal(da, solution, INSERT_VALUES, x_local);
@@ -60,6 +60,9 @@ PetscErrorCode StepMonitor(TS ts, PetscInt step, PetscReal time, Vec solution, v
     SaltWaterPropBuild(&feed, x_array[0], x_array[14]);
     SaltWaterPropBuild(&cool, x_array[1], x_array[14]);
     SaltWaterPropBuild(&distilled, (x_array[4] + x_array[5]) / 2.0, 0.0);
+    SaltWaterPropBuild(&prop,
+                       0.5 * (entry_data.dessal_data.entry_temperature_feed + x_array[1]),
+                       entry_data.dessal_data.entry_salinity_cool);
 
     if (step == 0)
     {
@@ -85,11 +88,11 @@ PetscErrorCode StepMonitor(TS ts, PetscInt step, PetscReal time, Vec solution, v
                                              "Desal - Specific total energy consumption (STEC) (kWh/m^3),"
                                              "Desal - Hot feedwater outlet mass flow rate (kg/s),"
                                              "Desal - Total water produced (kg),"
-                                             "Dessal - Total water produced (L),");
+                                             "Dessal - Total water produced (L)\n");
     }
     else if (step % number_steps == 0)
     {
-        PetscFPrintf(PETSC_COMM_WORLD, fptr, "%.10f,%.10f,%.10f,%.10f,%.10f,%.10f,%.10f,%.10f,%.10f,%.10f,%.10f,%.10f,%.10f,%.10f,%10f,"
+        PetscFPrintf(PETSC_COMM_WORLD, fptr, "%.10f,%.10f,%.10f,%.10f,%.10f,%.10f,%.10f,%.10f,%.10f,%.10f,%.10f,%.10f,%.10f,%.10f,%.10f,"
                                              "%.10f,%.10f,%.10f,%.10f,%.10f,%.10f,%.10f,%.10f\n",
                      time,
                      x_array[0],                                    // "Desal - Hot feedwater outlet temperature (°C),"
@@ -101,19 +104,19 @@ PetscErrorCode StepMonitor(TS ts, PetscInt step, PetscReal time, Vec solution, v
                      x_array[6],                                    // "Desal - Coolant wall temperature (°C),"
                      100.0 * x_array[7],                            // "Desal - Hot feedwater outlet salinity (wt%%),"
                      feed.density * x_array[7],                     // "Desal - Hot feedwater outlet salinity (g/L),"
-                     cool.density * x_array[14],                    // "Desal - Cold feedwater outlet salinity (g/L),"
+                     cool.density * entry_data.dessal_data.entry_salinity_feed,// "Desal - Cold feedwater outlet salinity (g/L),"
                      3600.0 * x_array[8],                           // "Desal - Mass flux (kg/m²h),"
                      3600.0 * x_array[8] * membrane_area,           // "Desal - Distilled water production rate (kg/h),"
                      x_array[9],                                    // "Desal - Total heat flux (W/m²),"
                      x_array[9] * membrane_area,                    // "Desal - Total heat transfer rate (W),"
                      x_array[10],                                   // "Desal - Vapor heat flux (W/m²),"
                      x_array[10] * membrane_area,                   // "Desal - Vapor heat transfer rate (W),"
-                     x_array[10] * membrane_area / x_array[22],     // "Desal - Gain-output ratio (GOR),"
+                     x_array[10] * membrane_area / (entry_data.dessal_data.cool_mass_flow_rate * prop.specific_heat * (entry_data.dessal_data.entry_temperature_feed - x_array[1])),     // "Desal - Gain-output ratio (GOR),"
                      100.0 * x_array[10] / x_array[9],              // "Desal - Thermal efficiency,"
-                     distilled.density * x_array[53] / x_array[50], // "Desal - Specific total energy consumption (STEC) (kWh/m^3),"
+                     (distilled.density * (entry_data.dessal_data.cool_mass_flow_rate * prop.specific_heat * (entry_data.dessal_data.entry_temperature_feed - x_array[1])) / (x_array[8] * membrane_area)) / 3600000.0, // "Desal - Specific total energy consumption (STEC) (kWh/m^3),"
                      x_array[11],                                   // "Desal - Hot feedwater outlet mass flow rate (kg/s),"
-                     x_array[50],                                   // "Desal - Total water produced (kg),"
-                     x_array[50] * 1000.0 / distilled.density);     // "Dessal - Total water produced (L)"
+                     x_array[13],                                   // "Desal - Total water produced (kg),"
+                     x_array[13] * 1000.0 / distilled.density);     // "Dessal - Total water produced (L)"
     }
 
     DMDAVecRestoreArrayRead(da, x_local, &x_array);

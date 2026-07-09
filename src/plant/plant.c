@@ -25,6 +25,8 @@ PetscErrorCode InitialGuess(Vec x, SolverCtx *solver_ctx)
     x_array[11] = dessal_data.feed_outflow_rate;
     x_array[12] = dessal_data.concentration;
 
+    x_array[13] = 0.0;
+
     DMDAVecRestoreArray(da, x, &x_array);
 
     return 0;
@@ -80,6 +82,7 @@ PetscErrorCode PlantBalances(TS ts, PetscReal time, Vec x, Vec x_t, Vec f, void 
     f_array[10] = x_array[10] - dessal_data.vapor_heat_flux;
     f_array[11] = x_array[11] - dessal_data.feed_outflow_rate;
     f_array[12] = x_array[12] - dessal_data.concentration;
+    f_array[13] = x_t_array[13] - x_array[8] * dessal_data.membrane_area; // Represents the total water produced
 
     DMDAVecRestoreArray(da, x_local, &x_array);
     DMDAVecRestoreArray(da, x_t, &x_t_array);
