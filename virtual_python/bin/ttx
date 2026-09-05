@@ -1,4 +1,4 @@
-#!/home/wslpimenta/2026/reavaliacao_desal/virtual_python/bin/python3
+#!/home/lucas/2026/reavaliacao_desal/virtual_python/bin/python3
 # -*- coding: utf-8 -*-
 import re
 import sys
